@@ -68,7 +68,7 @@ class IIIFClient(BaseProtocol):
     async def discover(self, url: str) -> AsyncIterator[CreativeWork]:
         """Fetch a IIIF manifest and yield a CreativeWork tree.
 
-        Each canvas becomes a part with role "image" MediaObjects.
+        Each canvas becomes a part with image MediaObjects.
         A "manifest" MediaObject is added at the top level.
         """
         client = create_client(self.config)
@@ -108,9 +108,6 @@ class IIIFClient(BaseProtocol):
             type="Book",
             name=title,
             url=manifest_url,
-            associated_media=[
-                MediaObject(content_url=manifest_url, role="manifest", encoding_format="application/json")
-            ],
         )
 
         for idx, canvas in enumerate(manifest.canvases, start=1):
@@ -128,7 +125,6 @@ class IIIFClient(BaseProtocol):
             media.append(
                 MediaObject(
                     content_url=url,
-                    role="image",
                     encoding_format=f"image/{self.config.iiif_format}",
                     fallback_url=fallback,
                     width=image.width or canvas.width,
@@ -166,7 +162,7 @@ class IIIFClient(BaseProtocol):
             images_dir = output_dir / "images"
             images_dir.mkdir(parents=True, exist_ok=True)
             for media in work.associated_media:
-                if media.role == "image":
+                if media.encoding_format and media.encoding_format.startswith("image/"):
                     filename = f"{str(work.position).zfill(4)}{self.config.file_ext}"
                     save_path = images_dir / filename
                     media.local_path = save_path

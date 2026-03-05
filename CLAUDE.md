@@ -32,8 +32,8 @@ No test suite exists yet. No linter/formatter is configured in pyproject.toml.
 
 Built on Schema.org vocabulary. The central class is `CreativeWork` — a universal node that forms trees via `parts`/`is_part_of` (Schema.org `hasPart`/`isPartOf`). `MediaObject` represents downloadable files.
 
-- **CreativeWork** — Universal node using Schema.org types: `id`, `type` (str, e.g. "Book", "Collection", "CreativeWork"), `name`, `url`, `position`, `creator`, `date_published`, `in_language`, `license`, `description`, `publisher`, `contributor`, `identifier`, `keywords`, `text`, `encoding_format`, `parts` (children), `is_part_of` (parent), `associated_media`, `local_dir`, `extra`. Helper methods: `add_part()`, `get_parts_by_type()`, `get_media_by_role()`, `all_media` (recursive), `all_parts` (recursive).
-- **MediaObject** — Downloadable file: `content_url`, `encoding_format`, `role` (str, e.g. "image", "ocr", "text", "manifest"), `width`, `height`, `duration`, `content_size`, `local_path`, `fallback_url`.
+- **CreativeWork** — Universal node using Schema.org types: `id`, `type` (str, e.g. "Book", "Collection", "CreativeWork"), `name`, `url`, `position`, `creator`, `date_published`, `in_language`, `license`, `description`, `publisher`, `contributor`, `identifier`, `keywords`, `text`, `encoding_format`, `parts` (children), `is_part_of` (parent), `associated_media`, `local_dir`, `extra`. Helper methods: `add_part()`, `get_parts_by_type()`, `all_media` (recursive), `all_parts` (recursive).
+- **MediaObject** — Downloadable file: `content_url`, `encoding_format`, `width`, `height`, `duration`, `content_size`, `local_path`, `fallback_url`.
 - **Record** — Pipeline envelope: `id`, `source`, `stage` (PipelineStage), `work: CreativeWork | None`, `errors`.
 - **PipelineContext** — Runtime context: `repo_name`, `output_dir`, `state_dir`, `config`.
 
@@ -86,13 +86,13 @@ Global dict mapping repo names to classes. Auto-populated by repo `__init_subcla
 
 ## Key Patterns
 
-- **Schema.org data model**: Everything is a `CreativeWork` with a `type` string (e.g. "Book", "Collection"). Trees via `parts`/`is_part_of`. Files are `MediaObject` with `content_url`, `role`, `local_path`. Properties use Schema.org naming (`name`, `creator`, `date_published`, `in_language`, etc.).
+- **Schema.org data model**: Everything is a `CreativeWork` with a `type` string (e.g. "Book", "Collection"). Trees via `parts`/`is_part_of`. Files are `MediaObject` with `content_url`, `encoding_format`, `local_path`. Properties use Schema.org naming (`name`, `creator`, `date_published`, `in_language`, etc.).
 - **Protocols vs repos**: Protocols (IIIF, OAI-PMH) are *how* you talk to something. Repos (e-rara, Gallica) are *where* you get things — they compose protocols. The `iiif` CLI command uses the IIIF protocol directly; repo commands go through the pipeline.
 - **Repos auto-register**: Subclass `BaseRepo` with a `name`, implement async abstract methods.
 - **All I/O is async**: Pipeline, repos, protocols use `async/await` and `AsyncIterator`.
 - **Pydantic models**: All data models are Pydantic `BaseModel` subclasses, supporting `model_dump()`, `model_dump_json()`, `model_validate()`, `model_validate_json()`. The `is_part_of` back-reference on `CreativeWork` is excluded from serialization to avoid circular references.
 - **Format / Protocol separation**: Parsers produce format-specific Pydantic models. Protocol clients convert those to CreativeWork trees.
-- **Media model**: Files are `MediaObject` with `content_url`, `role` (string), `local_path`. `DownloadManager` updates `local_path` on success.
+- **Media model**: Files are `MediaObject` with `content_url`, `encoding_format` (MIME type), `local_path`. `DownloadManager` updates `local_path` on success.
 - **CLI uses asyncio.run()**: Click commands wrap async functions.
 
 ## Dependencies

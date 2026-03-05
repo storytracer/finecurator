@@ -44,7 +44,6 @@ class MediaObject(BaseModel):
 
     content_url: str
     encoding_format: str | None = None
-    role: str | None = None  # e.g. "image", "thumbnail", "ocr", "text", "manifest"
     width: int | None = None
     height: int | None = None
     duration: float | None = None
@@ -103,10 +102,6 @@ class CreativeWork(BaseModel):
     def get_parts_by_type(self, schema_type: str) -> list[CreativeWork]:
         """Return direct parts matching the given Schema.org type."""
         return [p for p in self.parts if p.type == schema_type]
-
-    def get_media_by_role(self, role: str) -> list[MediaObject]:
-        """Return media on this work matching the given role."""
-        return [m for m in self.associated_media if m.role == role]
 
     @property
     def all_media(self) -> list[MediaObject]:

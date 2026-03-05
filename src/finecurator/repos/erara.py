@@ -87,17 +87,14 @@ class ERaraRepo(BaseRepo):
         tasks: list[DownloadTask] = []
 
         for media in work.all_media:
-            if media.role in ("manifest", "structural"):
-                continue
-
             if media.content_url:
-                save_dir = output_dir / _role_subdir(media.role)
+                save_dir = output_dir / _format_subdir(media.encoding_format)
                 save_dir.mkdir(parents=True, exist_ok=True)
 
                 owner = _find_media_owner(work, media)
                 if owner and owner.position is not None:
                     pos_str = str(owner.position).zfill(4)
-                    ext = _role_extension(media.role)
+                    ext = _format_extension(media.encoding_format)
                     filename = f"{pos_str}{ext}"
                 else:
                     filename = media.content_url.split("/")[-1] or "file"
@@ -130,8 +127,8 @@ class ERaraRepo(BaseRepo):
 
         alto_parser = ALTOParser()
         for page in record.work.get_parts_by_type("CreativeWork"):
-            for media in page.get_media_by_role("ocr"):
-                if media.local_path and media.local_path.exists():
+            for media in page.associated_media:
+                if media.encoding_format == "application/xml" and media.local_path and media.local_path.exists():
                     try:
                         alto_xml = media.local_path.read_text(encoding="utf-8")
                         page.text = alto_parser.extract_text_only(alto_xml)
@@ -164,18 +161,10 @@ class ERaraRepo(BaseRepo):
             in_language=mets_md.language,
             license=mets_md.license,
             description=mets_md.subtitle,
-            associated_media=[
-                MediaObject(
-                    content_url=f"https://www.e-rara.ch/i3f/v20/{book_id}/manifest",
-                    role="manifest",
-                    encoding_format="application/json",
-                ),
-                MediaObject(
-                    content_url=f"https://www.e-rara.ch/oai?verb=GetRecord&metadataPrefix=mets&identifier={book_id}",
-                    role="structural",
-                    encoding_format="application/xml",
-                ),
-            ],
+            extra={
+                "manifest_url": f"https://www.e-rara.ch/i3f/v20/{book_id}/manifest",
+                "mets_url": f"https://www.e-rara.ch/oai?verb=GetRecord&metadataPrefix=mets&identifier={book_id}",
+            },
         )
 
         canvases = iiif_manifest.canvases
@@ -189,7 +178,6 @@ class ERaraRepo(BaseRepo):
                 page_media.append(
                     MediaObject(
                         content_url=primary,
-                        role="image",
                         encoding_format=f"image/{self.config.iiif_format}",
                         fallback_url=fallback,
                         width=image.width or canvas.width,
@@ -204,12 +192,12 @@ class ERaraRepo(BaseRepo):
                     if mets_file and mets_file.href:
                         if file_id.startswith("ALTO") or (mets_file.use and "FULLTEXT" in mets_file.use.upper()):
                             page_media.append(
-                                MediaObject(content_url=mets_file.href, role="ocr", encoding_format="application/xml")
+                                MediaObject(content_url=mets_file.href, encoding_format="application/xml")
                             )
                             plain_url = mets_file.href.replace("/alto3/", "/plain/")
                             if plain_url != mets_file.href:
                                 page_media.append(
-                                    MediaObject(content_url=plain_url, role="text", encoding_format="text/plain")
+                                    MediaObject(content_url=plain_url, encoding_format="text/plain")
                                 )
 
             page_label = canvas.label or (mets_page.label if mets_page else str(idx))
@@ -225,26 +213,25 @@ class ERaraRepo(BaseRepo):
 
         return work
 
-def _role_subdir(role: str | None) -> str:
-    return {
-        "image": "images",
-        "thumbnail": "images",
-        "ocr": "ocr/alto",
-        "text": "ocr/text",
-        "audio": "audio",
-        "video": "video",
-    }.get(role or "", "other")
+def _format_subdir(encoding_format: str | None) -> str:
+    fmt = (encoding_format or "").lower()
+    if fmt.startswith("image/"):
+        return "images"
+    if fmt == "application/xml":
+        return "ocr/alto"
+    if fmt == "text/plain":
+        return "ocr/text"
+    return "other"
 
 
-def _role_extension(role: str | None) -> str:
+def _format_extension(encoding_format: str | None) -> str:
     return {
-        "image": ".jpg",
-        "thumbnail": ".jpg",
-        "ocr": ".xml",
-        "text": ".txt",
-        "audio": ".mp3",
-        "video": ".mp4",
-    }.get(role or "", "")
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/tiff": ".tif",
+        "application/xml": ".xml",
+        "text/plain": ".txt",
+    }.get((encoding_format or "").lower(), "")
 
 
 def _find_media_owner(root: CreativeWork, media: MediaObject) -> CreativeWork | None:
