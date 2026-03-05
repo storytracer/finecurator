@@ -18,13 +18,13 @@ uv run finecurator <command>
 # Example CLI commands
 uv run finecurator repos                                                  # List registered repos
 uv run finecurator iiif <manifest_url> -o ./out                           # Fetch any IIIF manifest directly
-uv run finecurator run erara --url <erara_url> -o ./out                   # Discover + download (default)
-uv run finecurator run erara --url <erara_url> --export-format png        # Discover + download + export
+uv run finecurator get erara --url <erara_url> -o ./out                   # Discover + download (default)
+uv run finecurator get erara --url <erara_url> --export-format png        # Discover + download + export
 uv run finecurator discover erara --url <erara_url> -o ./out              # Discover only, saves state
 uv run finecurator download erara --url <erara_url> -o ./out              # Auto-discovers if needed
 uv run finecurator export erara --url <erara_url> --export-format text    # Auto-downloads if needed
-uv run finecurator -v run erara --url <url> -o ./out                      # Verbose logging
-uv run finecurator run erara --url <url> -f                               # Force re-run (ignore cache)
+uv run finecurator -v get erara --url <url> -o ./out                      # Verbose logging
+uv run finecurator get erara --url <url> -f                               # Force re-run (ignore cache)
 ```
 
 No test suite exists yet. No linter/formatter is configured in pyproject.toml.
@@ -42,7 +42,7 @@ Built on Schema.org vocabulary. The central class is `CreativeWork` — a univer
 
 ### Pipeline (`pipeline.py`)
 
-Orchestrates async stages: discover → download → export. All stages use `AsyncIterator[Record]`. State-aware and idempotent — stages check persisted state before running and skip already-completed work. Dependencies auto-resolve (download auto-discovers, export auto-downloads). The default `run` command executes discover + download; export is opt-in via `--export-format`.
+Orchestrates async stages: discover → download → export. All stages use `AsyncIterator[Record]`. State-aware and idempotent — stages check persisted state before running and skip already-completed work. Dependencies auto-resolve (download auto-discovers, export auto-downloads). The default `get` command executes discover + download; export is opt-in via `--export-format`.
 
 ### State Management (`state.py`)
 

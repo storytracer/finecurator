@@ -66,8 +66,8 @@ def iiif(url: str, output_dir: Path) -> None:
 @click.option("--url", default=None, help="Source URL (manifest, page, etc.).")
 @click.option("-f", "--force", is_flag=True, help="Ignore cached state, re-run from scratch.")
 @click.option("--export-format", default=None, help="If set, also run export (e.g. png, webp, text).")
-def run(repo: str, output_dir: Path, url: str | None, force: bool, export_format: str | None) -> None:
-    """Run the pipeline for REPO (discover + download by default)."""
+def get(repo: str, output_dir: Path, url: str | None, force: bool, export_format: str | None) -> None:
+    """Get records from REPO (discover + download by default)."""
     kwargs: dict = {}
     if url:
         kwargs["url"] = url

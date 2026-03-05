@@ -23,16 +23,29 @@ finecurator repos
 # Fetch and download a IIIF manifest directly
 finecurator iiif https://example.org/manifest.json -o ./output
 
-# Run the full pipeline for an e-rara book
-finecurator run erara --url https://www.e-rara.ch/stp/content/titleinfo/24224395 -o ./output
+# Get an e-rara book (discover + download)
+finecurator get erara --url https://www.e-rara.ch/stp/content/titleinfo/24224395 -o ./output
+
+# Get and export to a specific format
+finecurator get erara --url https://www.e-rara.ch/stp/content/titleinfo/24224395 --export-format png
 
 # Run individual stages
-finecurator discover erara --url https://www.e-rara.ch/stp/content/titleinfo/24224395
+finecurator discover erara --url https://www.e-rara.ch/stp/content/titleinfo/24224395 -o ./output
 finecurator download erara --url https://www.e-rara.ch/stp/content/titleinfo/24224395 -o ./output
+finecurator export erara --url https://www.e-rara.ch/stp/content/titleinfo/24224395 --export-format text
+
+# Force re-run (ignore cached state)
+finecurator get erara --url https://www.e-rara.ch/stp/content/titleinfo/24224395 -f
 
 # Verbose logging
-finecurator -v run erara --url https://www.e-rara.ch/stp/content/titleinfo/24224395 -o ./output
+finecurator -v get erara --url https://www.e-rara.ch/stp/content/titleinfo/24224395 -o ./output
 ```
+
+All stages are idempotent. Re-running a command skips already-completed work (like yt-dlp). Use `--force` / `-f` to override cached state.
+
+Stage dependencies are resolved automatically:
+- `download` auto-runs `discover` if needed
+- `export` auto-runs `discover` + `download` if needed
 
 ### Library
 
@@ -42,11 +55,18 @@ from finecurator import Pipeline
 
 async def main():
     pipeline = Pipeline(repo_name="erara", output_dir="./output")
+
+    # Discover + download (default)
     async for record in pipeline.run(url="https://www.e-rara.ch/stp/content/titleinfo/24224395"):
         print(record.id, record.stage)
         if record.work:
             print(f"  {record.work.name}")
             print(f"  {len(record.work.all_media)} media files")
+
+    # Export to a specific format
+    records = pipeline.run(url="https://www.e-rara.ch/stp/content/titleinfo/24224395")
+    async for record in pipeline.export(records, export_format="png"):
+        print(f"Exported {record.id}")
 
 asyncio.run(main())
 ```
@@ -62,7 +82,6 @@ book = CreativeWork(
     id="book-001",
     type="Book",
     name="Encyclopedie",
-    creator="Diderot",
 )
 
 page = CreativeWork(
@@ -71,7 +90,7 @@ page = CreativeWork(
     position=1,
     name="1",
     associated_media=[
-        MediaObject(content_url="https://example.com/p1.jpg", role="image"),
+        MediaObject(content_url="https://example.com/p1.jpg", encoding_format="image/jpeg"),
     ],
 )
 book.add_part(page)
@@ -99,9 +118,38 @@ Built on Schema.org vocabulary. All models are Pydantic `BaseModel` subclasses.
 - **`Record`** -- pipeline envelope wrapping a `CreativeWork` with `stage`, `source`, and `errors`.
 - **`PipelineContext`** -- runtime context with `repo_name`, `output_dir`, `state_dir`, `config`.
 
+### Pipeline
+
+Orchestrates three async stages: **discover** -> **download** -> **export**. Each stage operates on `AsyncIterator[Record]` for memory efficiency. The default `get` command runs discover + download; export is opt-in.
+
+The pipeline is state-aware and idempotent. `StateManager` persists records as JSON after each stage completion. Before running a stage, the pipeline checks if the record has already completed that stage and skips it if so.
+
+### State Management
+
+`StateManager` persists `Record` objects as JSON in `.state/` within the output directory:
+
+```
+output/
+  .state/
+    _sources.json          # URL -> record ID mapping
+    {record_id}.json       # Serialized Record at latest stage
+  {record_id}/
+    images/
+    ocr/alto/
+    ocr/text/
+    export/                # Only after export stage
+```
+
+### Export System
+
+Converts downloaded files without modifying originals. Output goes to `{record_id}/export/`.
+
+- **`ImageExporter`** -- Pillow-based image format conversion (e.g. TIFF -> PNG, JPEG -> WebP)
+- **`TextExporter`** -- ALTO XML -> plain text extraction
+
 ### Repos
 
-Source repos encapsulate all source-specific logic behind an async interface: `discover`, `download`, `process`, `extract_metadata`. Concrete repos subclass `BaseRepo` and are automatically registered by name.
+Source repos encapsulate all source-specific logic behind an async interface: `discover` and `download`. Concrete repos subclass `BaseRepo` and are automatically registered by name.
 
 Built-in repos:
 - **`erara`** -- e-rara.ch repo combining IIIF images + METS metadata + ALTO OCR
@@ -123,18 +171,10 @@ Convert format models to `CreativeWork` trees:
 - **IIIFClient** -- fetches manifests, creates `CreativeWork(type="Book")` with page parts
 - **OAIPMHClient** -- stub for future OAI-PMH support
 
-### Pipeline
-
-Orchestrates the flow from raw source to curated output through three async stages: discover, download, process. Each stage is independently runnable, operating on async iterators for memory efficiency.
-
 ### Utilities
 
 - **`utils/text.py`** -- URL parsing, domain extraction, base64url slugs
 - **`utils/file.py`** -- file operations, filename generation
-- **`utils/processing.py`** -- OCR/HTR/image conversion stubs
-- **`utils/cleaning.py`** -- text normalization stubs
-- **`utils/metadata.py`** -- metadata merge/normalization stubs
-- **`utils/validation.py`** -- quality validation stubs
 
 ## Adding a repo
 
@@ -155,15 +195,9 @@ class MySourceRepo(BaseRepo):
 
     async def download(self, record: Record, output_dir: Path) -> Record:
         ...
-
-    async def process(self, record: Record, output_dir: Path) -> Record:
-        ...
-
-    async def extract_metadata(self, record: Record) -> Record:
-        ...
 ```
 
-The repo is automatically registered and available via `finecurator run my-source` and `get_repo("my-source")`.
+The repo is automatically registered and available via `finecurator get my-source` and `get_repo("my-source")`.
 
 ## Dependencies
 
@@ -175,3 +209,4 @@ The repo is automatically registered and available via `finecurator run my-sourc
 - [fake-useragent](https://github.com/fake-useragent/fake-useragent) (request masking)
 - [tldextract](https://github.com/john-googler/tldextract) (domain parsing)
 - [url64](https://github.com/nicois/url64) (URL-safe base64 slugs)
+- [Pillow](https://pillow.readthedocs.io/) (image format conversion)
