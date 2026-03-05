@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class IIIFAdapter(BaseAdapter):
     """Adapter for any IIIF Presentation API manifest."""
 
-    name = "iiif"
+    name = "iiif-generic"
 
     def __init__(self, config: HttpConfig | None = None):
         self.config = config or HttpConfig()

@@ -16,12 +16,12 @@ uv sync
 uv run finecurator <command>
 
 # Example CLI commands
-uv run finecurator adapters                              # List registered adapters (iiif, erara)
-uv run finecurator run iiif --url <manifest_url> -o ./out
+uv run finecurator adapters                                        # List registered adapters (iiif-generic, erara)
+uv run finecurator run iiif-generic --url <manifest_url> -o ./out
 uv run finecurator run erara --url <erara_url> -o ./out
-uv run finecurator discover iiif --url <manifest_url>
-uv run finecurator download iiif --url <manifest_url> -o ./out
-uv run finecurator -v run iiif --url <url> -o ./out      # Verbose logging
+uv run finecurator discover iiif-generic --url <manifest_url>
+uv run finecurator download iiif-generic --url <manifest_url> -o ./out
+uv run finecurator -v run iiif-generic --url <url> -o ./out        # Verbose logging
 ```
 
 No test suite exists yet. No linter/formatter is configured in pyproject.toml.
@@ -48,7 +48,7 @@ Orchestrates six async stages: discover → download → process → clean → v
 ### Adapters (`adapters/`)
 
 - **BaseAdapter** (`adapters/base.py`) — Abstract base with async methods. Auto-registers via `__init_subclass__`.
-- **IIIFAdapter** (`adapters/iiif.py`, `name="iiif"`) — Generic IIIF manifest adapter. Delegates to `IIIFClient` protocol.
+- **IIIFAdapter** (`adapters/iiif.py`, `name="iiif-generic"`) — Generic IIIF manifest adapter. Delegates to `IIIFClient` protocol.
 - **ERaraAdapter** (`adapters/erara.py`, `name="erara"`) — e-rara.ch adapter combining IIIF images + METS metadata + ALTO OCR.
 
 ### HTTP (`http/`)
