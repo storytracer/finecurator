@@ -11,7 +11,6 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-from finecurator.formats.alto import ALTOParser
 from finecurator.formats.iiif import IIIFParser
 from finecurator.formats.mets import METSParser
 from finecurator.http.client import HttpConfig, create_client
@@ -84,11 +83,12 @@ class ERaraRepo(BaseRepo):
             return record
 
         work = record.work
+        record_dir = output_dir / record.id
         tasks: list[DownloadTask] = []
 
         for media in work.all_media:
             if media.content_url:
-                save_dir = output_dir / _format_subdir(media.encoding_format)
+                save_dir = record_dir / _format_subdir(media.encoding_format)
                 save_dir.mkdir(parents=True, exist_ok=True)
 
                 owner = _find_media_owner(work, media)
@@ -116,26 +116,8 @@ class ERaraRepo(BaseRepo):
             count = await dm.execute()
             logger.info(f"Downloaded {count} resources for {record.id}")
 
-        work.local_dir = output_dir
+        work.local_dir = record_dir
         record.stage = PipelineStage.DOWNLOADED
-        return record
-
-    async def process(self, record: Record, output_dir: Path) -> Record:
-        if record.work is None:
-            record.stage = PipelineStage.PROCESSED
-            return record
-
-        alto_parser = ALTOParser()
-        for page in record.work.get_parts_by_type("CreativeWork"):
-            for media in page.associated_media:
-                if media.encoding_format == "application/xml" and media.local_path and media.local_path.exists():
-                    try:
-                        alto_xml = media.local_path.read_text(encoding="utf-8")
-                        page.text = alto_parser.extract_text_only(alto_xml)
-                    except Exception as e:
-                        record.errors.append(f"ALTO parse error page {page.position}: {e}")
-
-        record.stage = PipelineStage.PROCESSED
         return record
 
     def _extract_id(self, url: str) -> str | None:

@@ -1,3 +1,6 @@
+# Default output directory
+output/
+
 # Claude Code
 .claude/
 

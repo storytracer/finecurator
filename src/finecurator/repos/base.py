@@ -43,11 +43,3 @@ class BaseRepo(ABC):
         """
         ...
 
-    @abstractmethod
-    async def process(self, record: Record, output_dir: Path) -> Record:
-        """Process raw data into a normalized format.
-
-        Returns the record updated to PROCESSED stage.
-        """
-        ...
-

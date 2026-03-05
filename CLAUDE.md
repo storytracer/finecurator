@@ -16,12 +16,15 @@ uv sync
 uv run finecurator <command>
 
 # Example CLI commands
-uv run finecurator repos                                    # List registered repos (erara, ...)
-uv run finecurator iiif <manifest_url> -o ./out                    # Fetch any IIIF manifest directly
-uv run finecurator run erara --url <erara_url> -o ./out            # Run full pipeline for a repo
-uv run finecurator discover erara --url <erara_url>
-uv run finecurator download erara --url <erara_url> -o ./out
-uv run finecurator -v run erara --url <url> -o ./out               # Verbose logging
+uv run finecurator repos                                                  # List registered repos
+uv run finecurator iiif <manifest_url> -o ./out                           # Fetch any IIIF manifest directly
+uv run finecurator run erara --url <erara_url> -o ./out                   # Discover + download (default)
+uv run finecurator run erara --url <erara_url> --export-format png        # Discover + download + export
+uv run finecurator discover erara --url <erara_url> -o ./out              # Discover only, saves state
+uv run finecurator download erara --url <erara_url> -o ./out              # Auto-discovers if needed
+uv run finecurator export erara --url <erara_url> --export-format text    # Auto-downloads if needed
+uv run finecurator -v run erara --url <url> -o ./out                      # Verbose logging
+uv run finecurator run erara --url <url> -f                               # Force re-run (ignore cache)
 ```
 
 No test suite exists yet. No linter/formatter is configured in pyproject.toml.
@@ -39,14 +42,22 @@ Built on Schema.org vocabulary. The central class is `CreativeWork` — a univer
 
 ### Pipeline (`pipeline.py`)
 
-Orchestrates three async stages: discover -> download -> process. All stages use `AsyncIterator[Record]`.
+Orchestrates async stages: discover → download → export. All stages use `AsyncIterator[Record]`. State-aware and idempotent — stages check persisted state before running and skip already-completed work. Dependencies auto-resolve (download auto-discovers, export auto-downloads). The default `run` command executes discover + download; export is opt-in via `--export-format`.
+
+### State Management (`state.py`)
+
+`StateManager` persists `Record` objects as JSON in `.state/` within the output directory. Source URL → record ID mapping stored in `_sources.json`. After deserialization, `is_part_of` back-references are rebuilt. Enables yt-dlp-like idempotency — re-running any command skips already-completed stages.
+
+### Export System (`export.py`)
+
+Converts downloaded files without modifying originals. Output goes to `{record_id}/export/`. Base class `Exporter` with concrete implementations: `ImageExporter` (Pillow-based format conversion) and `TextExporter` (ALTO XML → plain text). `get_exporter(format)` factory function.
 
 ### Repositories (`repos/`)
 
 Each cultural heritage digital repository gets its own module.
 
-- **BaseRepo** (`repos/base.py`) — Abstract base with async methods. Auto-registers via `__init_subclass__`.
-- **ERaraRepo** (`repos/erara.py`, `name="erara"`) — e-rara.ch repository combining IIIF images + METS metadata + ALTO OCR.
+- **BaseRepo** (`repos/base.py`) — Abstract base with `discover()` and `download()` methods. Auto-registers via `__init_subclass__`.
+- **ERaraRepo** (`repos/erara.py`, `name="erara"`) — e-rara.ch repository combining IIIF images + METS metadata + ALTO OCR. Downloads to `output/{record_id}/` subdirectory.
 
 ### HTTP (`http/`)
 
@@ -88,7 +99,9 @@ Global dict mapping repo names to classes. Auto-populated by repo `__init_subcla
 
 - **Schema.org data model**: Everything is a `CreativeWork` with a `type` string (e.g. "Book", "Collection"). Trees via `parts`/`is_part_of`. Files are `MediaObject` with `content_url`, `encoding_format`, `local_path`. Properties use Schema.org naming (`name`, `creator`, `date_published`, `in_language`, etc.).
 - **Protocols vs repos**: Protocols (IIIF, OAI-PMH) are *how* you talk to something. Repos (e-rara, Gallica) are *where* you get things — they compose protocols. The `iiif` CLI command uses the IIIF protocol directly; repo commands go through the pipeline.
-- **Repos auto-register**: Subclass `BaseRepo` with a `name`, implement async abstract methods.
+- **Repos auto-register**: Subclass `BaseRepo` with a `name`, implement `discover()` and `download()`.
+- **Idempotent pipeline**: `StateManager` persists records as JSON after each stage. Re-running any command skips completed work. `--force` flag overrides. Like yt-dlp.
+- **Export preserves originals**: Downloaded files are never modified. Export writes to `{record_id}/export/` subdirectory.
 - **All I/O is async**: Pipeline, repos, protocols use `async/await` and `AsyncIterator`.
 - **Pydantic models**: All data models are Pydantic `BaseModel` subclasses, supporting `model_dump()`, `model_dump_json()`, `model_validate()`, `model_validate_json()`. The `is_part_of` back-reference on `CreativeWork` is excluded from serialization to avoid circular references.
 - **Format / Protocol separation**: Parsers produce format-specific Pydantic models. Protocol clients convert those to CreativeWork trees.
@@ -97,4 +110,4 @@ Global dict mapping repo names to classes. Auto-populated by repo `__init_subcla
 
 ## Dependencies
 
-`click`, `httpx[http2]`, `pydantic`, `tenacity`, `tqdm`, `fake-useragent`, `tldextract`, `url64`.
+`click`, `httpx[http2]`, `pydantic`, `tenacity`, `tqdm`, `fake-useragent`, `tldextract`, `url64`, `Pillow`.

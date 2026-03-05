@@ -12,7 +12,7 @@ import click
 import finecurator.repos.erara  # noqa: F401
 from finecurator.pipeline import Pipeline
 from finecurator.protocols.iiif import IIIFClient
-from finecurator.registry import get_repo, list_repos
+from finecurator.registry import list_repos
 
 
 @click.group()
@@ -64,15 +64,22 @@ def iiif(url: str, output_dir: Path) -> None:
 @click.argument("repo")
 @click.option("-o", "--output-dir", type=click.Path(path_type=Path), default=Path("output"))
 @click.option("--url", default=None, help="Source URL (manifest, page, etc.).")
-def run(repo: str, output_dir: Path, url: str | None) -> None:
-    """Run the full pipeline for REPO."""
-    kwargs = {}
+@click.option("-f", "--force", is_flag=True, help="Ignore cached state, re-run from scratch.")
+@click.option("--export-format", default=None, help="If set, also run export (e.g. png, webp, text).")
+def run(repo: str, output_dir: Path, url: str | None, force: bool, export_format: str | None) -> None:
+    """Run the pipeline for REPO (discover + download by default)."""
+    kwargs: dict = {}
     if url:
         kwargs["url"] = url
 
     async def _run():
         pipeline = Pipeline(repo_name=repo, output_dir=output_dir)
-        async for record in pipeline.run(**kwargs):
+        records = pipeline.run(force=force, **kwargs)
+
+        if export_format:
+            records = pipeline.export(records, export_format=export_format, force=force)
+
+        async for record in records:
             click.echo(f"[{record.stage.value}] {record.id}")
             if record.errors:
                 for err in record.errors:
@@ -83,18 +90,20 @@ def run(repo: str, output_dir: Path, url: str | None) -> None:
 
 @cli.command()
 @click.argument("repo")
+@click.option("-o", "--output-dir", type=click.Path(path_type=Path), default=Path("output"))
 @click.option("--url", default=None, help="Source URL.")
-def discover(repo: str, url: str | None) -> None:
-    """Discover records from REPO."""
-    kwargs = {}
+@click.option("-f", "--force", is_flag=True, help="Ignore cached state, re-discover.")
+def discover(repo: str, output_dir: Path, url: str | None, force: bool) -> None:
+    """Discover records from REPO (saves state for later stages)."""
+    kwargs: dict = {}
     if url:
         kwargs["url"] = url
 
     async def _discover():
-        repo_inst = get_repo(repo)()
-        async for record in repo_inst.discover(**kwargs):
+        pipeline = Pipeline(repo_name=repo, output_dir=output_dir)
+        async for record in pipeline.discover(force=force, **kwargs):
             name = record.work.name if record.work else ""
-            click.echo(f"{record.id}  {name}")
+            click.echo(f"[discovered] {record.id}  {name}")
 
     asyncio.run(_discover())
 
@@ -103,15 +112,16 @@ def discover(repo: str, url: str | None) -> None:
 @click.argument("repo")
 @click.option("-o", "--output-dir", type=click.Path(path_type=Path), default=Path("output"))
 @click.option("--url", default=None, help="Source URL.")
-def download(repo: str, output_dir: Path, url: str | None) -> None:
-    """Download records from REPO."""
-    kwargs = {}
+@click.option("-f", "--force", is_flag=True, help="Ignore cached state, re-download.")
+def download(repo: str, output_dir: Path, url: str | None, force: bool) -> None:
+    """Download records from REPO (auto-discovers if needed)."""
+    kwargs: dict = {}
     if url:
         kwargs["url"] = url
 
     async def _download():
         pipeline = Pipeline(repo_name=repo, output_dir=output_dir)
-        async for record in pipeline.download(pipeline.discover(**kwargs)):
+        async for record in pipeline.download(pipeline.discover(force=force, **kwargs), force=force):
             click.echo(f"[downloaded] {record.id}")
 
     asyncio.run(_download())
@@ -121,37 +131,21 @@ def download(repo: str, output_dir: Path, url: str | None) -> None:
 @click.argument("repo")
 @click.option("-o", "--output-dir", type=click.Path(path_type=Path), default=Path("output"))
 @click.option("--url", default=None, help="Source URL.")
-def process(repo: str, output_dir: Path, url: str | None) -> None:
-    """Process downloaded records from REPO."""
-    kwargs = {}
+@click.option("--export-format", default="png", help="Target format (png, webp, text, etc.).")
+@click.option("-f", "--force", is_flag=True, help="Ignore cached state, re-export.")
+def export(repo: str, output_dir: Path, url: str | None, export_format: str, force: bool) -> None:
+    """Export downloaded files to a target format (auto-downloads if needed)."""
+    kwargs: dict = {}
     if url:
         kwargs["url"] = url
 
-    async def _process():
+    async def _export():
         pipeline = Pipeline(repo_name=repo, output_dir=output_dir)
-        records = pipeline.download(pipeline.discover(**kwargs))
-        async for record in pipeline.process(records):
-            click.echo(f"[processed] {record.id}")
+        records = pipeline.download(pipeline.discover(force=force, **kwargs), force=force)
+        async for record in pipeline.export(records, export_format=export_format, force=force):
+            click.echo(f"[exported] {record.id} -> {export_format}")
+            if record.errors:
+                for err in record.errors:
+                    click.echo(f"  ERROR: {err}", err=True)
 
-    asyncio.run(_process())
-
-
-@cli.command()
-@click.option("-o", "--output-dir", type=click.Path(path_type=Path), default=Path("output"))
-def clean(output_dir: Path) -> None:
-    """Clean processed records."""
-    click.echo("Clean stage: not yet implemented.")
-
-
-@cli.command()
-@click.option("-o", "--output-dir", type=click.Path(path_type=Path), default=Path("output"))
-def validate(output_dir: Path) -> None:
-    """Validate cleaned records."""
-    click.echo("Validate stage: not yet implemented.")
-
-
-@cli.command()
-@click.option("-o", "--output-dir", type=click.Path(path_type=Path), default=Path("output"))
-def output(output_dir: Path) -> None:
-    """Output curated dataset."""
-    click.echo("Output stage: not yet implemented.")
+    asyncio.run(_export())

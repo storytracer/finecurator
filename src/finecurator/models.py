@@ -19,7 +19,19 @@ class PipelineStage(Enum):
 
     DISCOVERED = "discovered"
     DOWNLOADED = "downloaded"
-    PROCESSED = "processed"
+    EXPORTED = "exported"
+
+
+_STAGE_ORDER: dict[PipelineStage, int] = {
+    PipelineStage.DISCOVERED: 0,
+    PipelineStage.DOWNLOADED: 1,
+    PipelineStage.EXPORTED: 2,
+}
+
+
+def stage_gte(current: PipelineStage, required: PipelineStage) -> bool:
+    """Check if *current* stage is at or past *required*."""
+    return _STAGE_ORDER[current] >= _STAGE_ORDER[required]
 
 
 class Person(BaseModel):
