@@ -20,9 +20,6 @@ class PipelineStage(Enum):
     DISCOVERED = "discovered"
     DOWNLOADED = "downloaded"
     PROCESSED = "processed"
-    CLEANED = "cleaned"
-    VALIDATED = "validated"
-    OUTPUT = "output"
 
 
 class Person(BaseModel):

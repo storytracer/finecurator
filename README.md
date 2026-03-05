@@ -95,7 +95,7 @@ book2 = CreativeWork.model_validate_json(book.model_dump_json())
 Built on Schema.org vocabulary. All models are Pydantic `BaseModel` subclasses.
 
 - **`CreativeWork`** -- the universal node. Has `id`, `type` (str, e.g. "Book", "Collection"), `name`, `url`, `position`, Schema.org properties (`creator`, `date_published`, `in_language`, etc.), `parts`/`is_part_of` (tree hierarchy), `associated_media` (attached files), and `extra` (extension point).
-- **`MediaObject`** -- a downloadable file with `content_url`, `role` (str, e.g. "image", "ocr", "text"), `encoding_format`, `local_path`, `fallback_url`, and dimensions.
+- **`MediaObject`** -- a downloadable file with `content_url`, `encoding_format` (MIME type), `local_path`, `fallback_url`, and dimensions.
 - **`Record`** -- pipeline envelope wrapping a `CreativeWork` with `stage`, `source`, and `errors`.
 - **`PipelineContext`** -- runtime context with `repo_name`, `output_dir`, `state_dir`, `config`.
 
@@ -125,7 +125,7 @@ Convert format models to `CreativeWork` trees:
 
 ### Pipeline
 
-Orchestrates the flow from raw source to curated output through six async stages: discover, download, process, clean, validate, output. Each stage is independently runnable, operating on async iterators for memory efficiency.
+Orchestrates the flow from raw source to curated output through three async stages: discover, download, process. Each stage is independently runnable, operating on async iterators for memory efficiency.
 
 ### Utilities
 

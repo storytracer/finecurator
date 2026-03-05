@@ -1,4 +1,4 @@
-"""Pipeline orchestration: discover -> download -> process -> clean -> validate -> output."""
+"""Pipeline orchestration: discover -> download -> process."""
 
 from __future__ import annotations
 
@@ -22,9 +22,6 @@ class Pipeline:
         PipelineStage.DISCOVERED,
         PipelineStage.DOWNLOADED,
         PipelineStage.PROCESSED,
-        PipelineStage.CLEANED,
-        PipelineStage.VALIDATED,
-        PipelineStage.OUTPUT,
     ]
 
     def __init__(
@@ -49,10 +46,7 @@ class Pipeline:
         """Run the full pipeline end-to-end."""
         records = self.discover(**kwargs)
         records = self.download(records)
-        records = self.process(records)
-        records = self.clean(records)
-        records = self.validate(records)
-        async for record in self.output(records):
+        async for record in self.process(records):
             yield record
 
     async def discover(self, **kwargs: Any) -> AsyncIterator[Record]:
@@ -72,17 +66,3 @@ class Pipeline:
         async for record in records:
             yield await self.repo.process(record, process_dir)
 
-    async def clean(self, records: AsyncIterable[Record]) -> AsyncIterator[Record]:
-        """Run the clean stage (placeholder)."""
-        async for record in records:
-            yield record
-
-    async def validate(self, records: AsyncIterable[Record]) -> AsyncIterator[Record]:
-        """Run the validate stage (placeholder)."""
-        async for record in records:
-            yield record
-
-    async def output(self, records: AsyncIterable[Record]) -> AsyncIterator[Record]:
-        """Run the output stage (placeholder)."""
-        async for record in records:
-            yield record

@@ -39,7 +39,7 @@ Built on Schema.org vocabulary. The central class is `CreativeWork` — a univer
 
 ### Pipeline (`pipeline.py`)
 
-Orchestrates six async stages: discover -> download -> process -> clean -> validate -> output. All stages use `AsyncIterator[Record]`. Clean, validate, and output are placeholders.
+Orchestrates three async stages: discover -> download -> process. All stages use `AsyncIterator[Record]`.
 
 ### Repositories (`repos/`)
 
