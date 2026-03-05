@@ -16,7 +16,7 @@ from finecurator.formats.iiif import IIIFParser
 from finecurator.formats.mets import METSParser
 from finecurator.http.client import HttpConfig, create_client
 from finecurator.http.download import DownloadManager, DownloadTask
-from finecurator.models import CreativeWork, MediaObject, PipelineStage, Record
+from finecurator.models import CreativeWork, MediaObject, Person, PipelineStage, Record
 from finecurator.protocols.iiif import build_iiif_image_url
 from finecurator.repos.base import BaseRepo
 
@@ -157,9 +157,9 @@ class ERaraRepo(BaseRepo):
             type="Book",
             name=mets_md.title or f"Book {book_id}",
             url=url,
-            creator=mets_md.author or "Unknown",
-            date_published=mets_md.date or "Unknown",
-            publisher=mets_md.publisher,
+            creator=[Person(name=mets_md.author)] if mets_md.author else [],
+            date_published=mets_md.date,
+            publisher=Person(type="Organization", name=mets_md.publisher) if mets_md.publisher else None,
             identifier=mets_md.doi,
             in_language=mets_md.language,
             license=mets_md.license,

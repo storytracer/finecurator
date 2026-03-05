@@ -25,6 +25,17 @@ class PipelineStage(Enum):
     OUTPUT = "output"
 
 
+class Person(BaseModel):
+    """A person or organization (Schema.org Person/Organization).
+
+    Uses a ``type`` string to distinguish between "Person" and "Organization".
+    """
+
+    type: str = "Person"
+    name: str
+    url: str | None = None
+
+
 class MediaObject(BaseModel):
     """A downloadable file (Schema.org MediaObject).
 
@@ -57,13 +68,13 @@ class CreativeWork(BaseModel):
     position: int | None = None
 
     # Schema.org properties
-    creator: str | None = None
+    creator: list[Person] = Field(default_factory=list)
     date_published: str | None = None
     in_language: str | None = None
     license: str | None = None
     description: str | None = None
-    publisher: str | None = None
-    contributor: str | None = None
+    publisher: Person | None = None
+    contributor: list[Person] = Field(default_factory=list)
     identifier: str | None = None
     keywords: list[str] = Field(default_factory=list)
 

@@ -3,6 +3,7 @@
 from finecurator.models import (
     CreativeWork,
     MediaObject,
+    Person,
     PipelineContext,
     PipelineStage,
     Record,
@@ -15,6 +16,7 @@ __all__ = [
     "BaseRepo",
     "CreativeWork",
     "MediaObject",
+    "Person",
     "Pipeline",
     "PipelineContext",
     "PipelineStage",
