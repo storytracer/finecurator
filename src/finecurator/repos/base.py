@@ -51,7 +51,3 @@ class BaseRepo(ABC):
         """
         ...
 
-    @abstractmethod
-    async def extract_metadata(self, record: Record) -> Record:
-        """Extract and normalize metadata for a record."""
-        ...

@@ -1,9 +1,8 @@
-"""Abstract base classes for metadata format parsers and writers."""
+"""Abstract base classes for metadata format parsers."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import Generic, TypeVar
 
 T = TypeVar("T")  # Input type
@@ -29,32 +28,6 @@ class MetadataParser(ABC, Generic[T, R]):
     @property
     @abstractmethod
     def mime_types(self) -> list[str]:
-        ...
-
-
-class MetadataWriter(ABC, Generic[T]):
-    """Abstract base class for metadata format writers."""
-
-    @abstractmethod
-    def write(self, data: T, output_path: Path, **options) -> None:
-        ...
-
-    @abstractmethod
-    def to_string(self, data: T, **options) -> str:
-        ...
-
-    @abstractmethod
-    def validate_output(self, data: T) -> bool:
-        ...
-
-    @property
-    @abstractmethod
-    def format_name(self) -> str:
-        ...
-
-    @property
-    @abstractmethod
-    def file_extension(self) -> str:
         ...
 
 

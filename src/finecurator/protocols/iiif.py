@@ -27,6 +27,37 @@ from finecurator.protocols.base import BaseProtocol
 logger = logging.getLogger(__name__)
 
 
+def build_iiif_image_url(
+    image: IIIFImage, config: HttpConfig
+) -> tuple[str, str | None]:
+    """Build primary and fallback IIIF Image API URLs for an image resource."""
+    if not image.service:
+        return (image.id, None)
+
+    service = image.service
+    service_id = service.id.rstrip("/")
+
+    api_version = 2
+    if service.type and "ImageService3" in service.type:
+        api_version = 3
+    elif service.context and "/image/3/" in service.context:
+        api_version = 3
+    elif service.profile and "/image/3/" in str(service.profile):
+        api_version = 3
+
+    size_param = "max" if api_version == 3 else "full"
+
+    primary = (
+        f"{service_id}/"
+        f"{config.iiif_region}/"
+        f"{size_param}/"
+        f"{config.iiif_rotation}/"
+        f"{config.iiif_quality}.{config.iiif_format}"
+    )
+    fallback = image.id if image.id else None
+    return (primary, fallback)
+
+
 class IIIFClient(BaseProtocol):
     """Protocol client for IIIF Presentation API manifests."""
 
@@ -93,7 +124,7 @@ class IIIFClient(BaseProtocol):
         media: list[MediaObject] = []
 
         for image in canvas.images:
-            url, fallback = self._build_image_urls(image)
+            url, fallback = build_iiif_image_url(image, self.config)
             media.append(
                 MediaObject(
                     content_url=url,
@@ -112,38 +143,6 @@ class IIIFClient(BaseProtocol):
             name=canvas.label or str(position),
             associated_media=media,
         )
-
-    def _build_image_urls(self, image: IIIFImage) -> tuple[str, str | None]:
-        """Build primary and fallback URLs for an IIIF image."""
-        if not image.service:
-            return (image.id, None)
-
-        service_id = image.service.id.rstrip("/")
-        api_version = self._detect_image_api_version(image.service)
-        size_param = "max" if api_version == 3 else "full"
-
-        primary = (
-            f"{service_id}/"
-            f"{self.config.iiif_region}/"
-            f"{size_param}/"
-            f"{self.config.iiif_rotation}/"
-            f"{self.config.iiif_quality}.{self.config.iiif_format}"
-        )
-        fallback = image.id if image.id else None
-        return (primary, fallback)
-
-    def _detect_image_api_version(self, service) -> int:
-        if not service:
-            return 2
-        if service.type and "ImageService3" in service.type:
-            return 3
-        if service.context and "/image/3/" in service.context:
-            return 3
-        if service.profile:
-            profile_str = str(service.profile)
-            if "/image/3/" in profile_str:
-                return 3
-        return 2
 
     def _extract_title(self, manifest: IIIFManifestV2 | IIIFManifestV3) -> str:
         if hasattr(manifest, "label"):

@@ -17,6 +17,7 @@ from finecurator.formats.mets import METSParser
 from finecurator.http.client import HttpConfig, create_client
 from finecurator.http.download import DownloadManager, DownloadTask
 from finecurator.models import CreativeWork, MediaObject, PipelineStage, Record
+from finecurator.protocols.iiif import build_iiif_image_url
 from finecurator.repos.base import BaseRepo
 
 logger = logging.getLogger(__name__)
@@ -140,9 +141,6 @@ class ERaraRepo(BaseRepo):
         record.stage = PipelineStage.PROCESSED
         return record
 
-    async def extract_metadata(self, record: Record) -> Record:
-        return record
-
     def _extract_id(self, url: str) -> str | None:
         for pattern in _ERARA_ID_PATTERNS:
             match = re.search(pattern, url)
@@ -187,7 +185,7 @@ class ERaraRepo(BaseRepo):
             page_media: list[MediaObject] = []
 
             for image in canvas.images:
-                primary, fallback = self._build_image_urls(image)
+                primary, fallback = build_iiif_image_url(image, self.config)
                 page_media.append(
                     MediaObject(
                         content_url=primary,
@@ -226,30 +224,6 @@ class ERaraRepo(BaseRepo):
             work.add_part(page)
 
         return work
-
-    def _build_image_urls(self, image) -> tuple[str, str | None]:
-        if not image.service:
-            return (image.id, None)
-
-        service_id = image.service.id.rstrip("/")
-
-        api_version = 2
-        if image.service.type and "ImageService3" in image.service.type:
-            api_version = 3
-        elif image.service.context and "/image/3/" in image.service.context:
-            api_version = 3
-
-        size_param = "max" if api_version == 3 else "full"
-
-        primary = (
-            f"{service_id}/"
-            f"{self.config.iiif_region}/"
-            f"{size_param}/"
-            f"{self.config.iiif_rotation}/"
-            f"{self.config.iiif_quality}.{self.config.iiif_format}"
-        )
-        return (primary, image.id if image.id else None)
-
 
 def _role_subdir(role: str | None) -> str:
     return {

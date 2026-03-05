@@ -35,7 +35,7 @@ class HttpConfig(BaseModel):
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
     proxy: str | None = None
-    verify_ssl: bool = False
+    verify_ssl: bool = True
     cookie_file: str | None = None
     header_file: str | None = None
 
