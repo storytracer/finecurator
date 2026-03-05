@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
+from collections.abc import AsyncIterable, AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +13,9 @@ from finecurator.registry import get_adapter
 class Pipeline:
     """Orchestrates the full curation pipeline.
 
-    Each stage is independently runnable.  The pipeline can execute
-    end-to-end via :meth:`run` or stage-by-stage via the individual
-    methods.
+    Each stage is independently runnable. The pipeline can execute
+    end-to-end via ``run`` or stage-by-stage via individual methods.
+    All stages are async.
     """
 
     STAGES = [
@@ -45,42 +45,44 @@ class Pipeline:
             config=config or {},
         )
 
-    def run(self, **kwargs: Any) -> Iterator[Record]:
+    async def run(self, **kwargs: Any) -> AsyncIterator[Record]:
         """Run the full pipeline end-to-end."""
         records = self.discover(**kwargs)
         records = self.download(records)
         records = self.process(records)
         records = self.clean(records)
         records = self.validate(records)
-        yield from self.output(records)
+        async for record in self.output(records):
+            yield record
 
-    def discover(self, **kwargs: Any) -> Iterator[Record]:
+    async def discover(self, **kwargs: Any) -> AsyncIterator[Record]:
         """Run the discover stage via the adapter."""
-        yield from self.adapter.discover(**kwargs)
+        async for record in self.adapter.discover(**kwargs):
+            yield record
 
-    def download(self, records: Iterable[Record]) -> Iterator[Record]:
+    async def download(self, records: AsyncIterable[Record]) -> AsyncIterator[Record]:
         """Run the download stage via the adapter."""
         download_dir = self.output_dir / "raw"
-        for record in records:
-            yield self.adapter.download(record, download_dir)
+        async for record in records:
+            yield await self.adapter.download(record, download_dir)
 
-    def process(self, records: Iterable[Record]) -> Iterator[Record]:
+    async def process(self, records: AsyncIterable[Record]) -> AsyncIterator[Record]:
         """Run the process stage via the adapter."""
         process_dir = self.output_dir / "processed"
-        for record in records:
-            yield self.adapter.process(record, process_dir)
+        async for record in records:
+            yield await self.adapter.process(record, process_dir)
 
-    def clean(self, records: Iterable[Record]) -> Iterator[Record]:
-        """Run the clean stage. Uses shared cleaning utilities."""
-        # Placeholder -- will compose shared cleaning utils here.
-        yield from records
+    async def clean(self, records: AsyncIterable[Record]) -> AsyncIterator[Record]:
+        """Run the clean stage (placeholder)."""
+        async for record in records:
+            yield record
 
-    def validate(self, records: Iterable[Record]) -> Iterator[Record]:
-        """Run the validate stage. Uses shared validation utilities."""
-        # Placeholder -- will compose shared validation utils here.
-        yield from records
+    async def validate(self, records: AsyncIterable[Record]) -> AsyncIterator[Record]:
+        """Run the validate stage (placeholder)."""
+        async for record in records:
+            yield record
 
-    def output(self, records: Iterable[Record]) -> Iterator[Record]:
-        """Run the output stage. Formats and writes the curated dataset."""
-        # Placeholder -- will implement output formatting here.
-        yield from records
+    async def output(self, records: AsyncIterable[Record]) -> AsyncIterator[Record]:
+        """Run the output stage (placeholder)."""
+        async for record in records:
+            yield record

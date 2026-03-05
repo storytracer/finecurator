@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator
+from collections.abc import AsyncIterable, AsyncIterator
 from typing import ClassVar
 
 from finecurator.models import PipelineContext, Record
@@ -12,26 +12,17 @@ from finecurator.models import PipelineContext, Record
 class BaseStage(ABC):
     """Contract for a single pipeline stage.
 
-    Each stage receives an iterable of records, processes them, and
-    yields updated records.  Stages are independently runnable and
-    resumable.
+    Each stage receives an async iterable of records, processes them,
+    and yields updated records.
     """
 
     name: ClassVar[str]
 
     @abstractmethod
-    def run(
+    async def run(
         self,
-        records: Iterable[Record],
+        records: AsyncIterable[Record],
         context: PipelineContext,
-    ) -> Iterator[Record]:
-        """Run this stage over the given records.
-
-        Args:
-            records: Input records from the previous stage.
-            context: Pipeline runtime context.
-
-        Yields:
-            Updated records after this stage's processing.
-        """
+    ) -> AsyncIterator[Record]:
+        """Run this stage over the given records."""
         ...
