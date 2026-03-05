@@ -1,34 +1,24 @@
 """FineCurator: A modular toolkit for curating cultural heritage datasets."""
 
-from finecurator.adapters.base import BaseAdapter
 from finecurator.models import (
-    Item,
-    Metadata,
+    CreativeWork,
+    MediaObject,
     PipelineContext,
     PipelineStage,
-    Provider,
-    ProviderRole,
     Record,
-    Resource,
-    ResourceRole,
-    WorkType,
 )
 from finecurator.pipeline import Pipeline
-from finecurator.registry import get_adapter, list_adapters
+from finecurator.registry import get_repo, list_repos
+from finecurator.repos.base import BaseRepo
 
 __all__ = [
-    "BaseAdapter",
-    "Item",
-    "Metadata",
+    "BaseRepo",
+    "CreativeWork",
+    "MediaObject",
     "Pipeline",
     "PipelineContext",
     "PipelineStage",
-    "Provider",
-    "ProviderRole",
     "Record",
-    "Resource",
-    "ResourceRole",
-    "WorkType",
-    "get_adapter",
-    "list_adapters",
+    "get_repo",
+    "list_repos",
 ]

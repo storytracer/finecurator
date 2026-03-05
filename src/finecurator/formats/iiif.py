@@ -1,22 +1,22 @@
 """IIIF Presentation API manifest parser (v2 and v3).
 
-Parses manifests into format-specific dataclasses. Conversion to
-Item/Resource trees happens in the protocol layer (protocols/iiif.py).
+Parses manifests into pydantic models. Conversion to
+CreativeWork trees happens in the protocol layer (protocols/iiif.py).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 from finecurator.formats.base import VersionedParser
 
 
-# ── Format-specific dataclasses ──────────────────────────────────────
+# ── Format-specific models ──────────────────────────────────────────
 
 
-@dataclass
-class IIIFService:
+class IIIFService(BaseModel):
     """IIIF Image Service information."""
 
     id: str
@@ -34,8 +34,7 @@ class IIIFService:
         )
 
 
-@dataclass
-class IIIFImage:
+class IIIFImage(BaseModel):
     """IIIF Image resource."""
 
     id: str
@@ -65,15 +64,14 @@ class IIIFImage:
         )
 
 
-@dataclass
-class IIIFCanvas:
+class IIIFCanvas(BaseModel):
     """IIIF Canvas (page) information."""
 
     id: str
     label: str | None = None
     width: int | None = None
     height: int | None = None
-    images: list[IIIFImage] = field(default_factory=list)
+    images: list[IIIFImage] = Field(default_factory=list)
 
     @classmethod
     def from_dict_v2(cls, data: dict[str, Any]) -> IIIFCanvas:
@@ -120,15 +118,14 @@ class IIIFCanvas:
         )
 
 
-@dataclass
-class IIIFManifestV2:
+class IIIFManifestV2(BaseModel):
     """IIIF Presentation API v2 Manifest."""
 
     id: str
     label: str | None = None
     description: str | None = None
-    metadata: list[dict[str, Any]] = field(default_factory=list)
-    canvases: list[IIIFCanvas] = field(default_factory=list)
+    metadata: list[dict[str, Any]] = Field(default_factory=list)
+    canvases: list[IIIFCanvas] = Field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> IIIFManifestV2:
@@ -146,16 +143,15 @@ class IIIFManifestV2:
         )
 
 
-@dataclass
-class IIIFManifestV3:
+class IIIFManifestV3(BaseModel):
     """IIIF Presentation API v3 Manifest."""
 
     id: str
     type: str = ""
     label: dict[str, list[str]] | None = None
     summary: dict[str, list[str]] | None = None
-    metadata: list[dict[str, Any]] = field(default_factory=list)
-    items: list[IIIFCanvas] = field(default_factory=list)
+    metadata: list[dict[str, Any]] = Field(default_factory=list)
+    items: list[IIIFCanvas] = Field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> IIIFManifestV3:

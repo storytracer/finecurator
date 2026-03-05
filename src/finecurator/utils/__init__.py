@@ -1,1 +1,1 @@
-"""Shared utilities composed by adapters and pipeline stages."""
+"""Shared utilities composed by repos and pipeline stages."""

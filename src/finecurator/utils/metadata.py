@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from finecurator.models import Metadata
+from finecurator.models import CreativeWork
 
 
-def merge_metadata(*sources: Metadata) -> Metadata:
-    """Merge multiple Metadata objects, with later values taking precedence."""
+def merge_metadata(*sources: CreativeWork) -> CreativeWork:
+    """Merge multiple CreativeWork metadata, with later values taking precedence."""
     raise NotImplementedError
 
 

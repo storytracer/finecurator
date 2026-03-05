@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
+from pydantic import BaseModel
 from tqdm import tqdm
 
 from finecurator.http.client import HttpConfig, create_client, download_file
@@ -18,18 +18,13 @@ from finecurator.http.client import HttpConfig, create_client, download_file
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class DownloadTask:
+class DownloadTask(BaseModel):
     """A single download task with URL and destination."""
 
     url: str
     save_path: Path
     headers: dict[str, str] | None = None
     fallback_url: str | None = None
-
-    def __post_init__(self):
-        if isinstance(self.save_path, str):
-            self.save_path = Path(self.save_path)
 
 
 class DownloadManager:

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from finecurator.models import PipelineContext, PipelineStage, Record
-from finecurator.registry import get_adapter
+from finecurator.registry import get_repo
 
 
 class Pipeline:
@@ -29,17 +29,17 @@ class Pipeline:
 
     def __init__(
         self,
-        adapter_name: str,
+        repo_name: str,
         output_dir: Path,
         *,
         config: dict[str, Any] | None = None,
     ) -> None:
-        adapter_cls = get_adapter(adapter_name)
-        self.adapter = adapter_cls()
+        repo_cls = get_repo(repo_name)
+        self.repo = repo_cls()
         self.output_dir = Path(output_dir)
         self.state_dir = self.output_dir / ".state"
         self.context = PipelineContext(
-            adapter_name=adapter_name,
+            repo_name=repo_name,
             output_dir=self.output_dir,
             state_dir=self.state_dir,
             config=config or {},
@@ -56,21 +56,21 @@ class Pipeline:
             yield record
 
     async def discover(self, **kwargs: Any) -> AsyncIterator[Record]:
-        """Run the discover stage via the adapter."""
-        async for record in self.adapter.discover(**kwargs):
+        """Run the discover stage via the repo."""
+        async for record in self.repo.discover(**kwargs):
             yield record
 
     async def download(self, records: AsyncIterable[Record]) -> AsyncIterator[Record]:
-        """Run the download stage via the adapter."""
+        """Run the download stage via the repo."""
         download_dir = self.output_dir / "raw"
         async for record in records:
-            yield await self.adapter.download(record, download_dir)
+            yield await self.repo.download(record, download_dir)
 
     async def process(self, records: AsyncIterable[Record]) -> AsyncIterator[Record]:
-        """Run the process stage via the adapter."""
+        """Run the process stage via the repo."""
         process_dir = self.output_dir / "processed"
         async for record in records:
-            yield await self.adapter.process(record, process_dir)
+            yield await self.repo.process(record, process_dir)
 
     async def clean(self, records: AsyncIterable[Record]) -> AsyncIterator[Record]:
         """Run the clean stage (placeholder)."""

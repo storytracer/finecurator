@@ -7,11 +7,11 @@ proper configuration. Retry logic is handled by tenacity decorators.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
 from fake_useragent import UserAgent
+from pydantic import BaseModel
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -25,8 +25,7 @@ from finecurator.http.headers import load_headers_from_file
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class HttpConfig:
+class HttpConfig(BaseModel):
     """Configuration for HTTP client and download behaviour."""
 
     timeout: int = 300

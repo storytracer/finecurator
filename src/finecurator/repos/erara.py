@@ -1,35 +1,23 @@
-"""e-rara.ch adapter with IIIF, METS metadata, and OCR support.
+"""e-rara.ch repo with IIIF, METS metadata, and OCR support.
 
 Combines IIIF images with METS structural metadata and ALTO/plain text OCR.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-from finecurator.adapters.base import BaseAdapter
 from finecurator.formats.alto import ALTOParser
 from finecurator.formats.iiif import IIIFParser
 from finecurator.formats.mets import METSParser
-from finecurator.formats.rocrate import ROCrateWriter
 from finecurator.http.client import HttpConfig, create_client
 from finecurator.http.download import DownloadManager, DownloadTask
-from finecurator.models import (
-    Item,
-    Metadata,
-    PipelineStage,
-    Provider,
-    ProviderRole,
-    Record,
-    Resource,
-    ResourceRole,
-    WorkType,
-)
+from finecurator.models import CreativeWork, MediaObject, PipelineStage, Record
+from finecurator.repos.base import BaseRepo
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +30,8 @@ _ERARA_ID_PATTERNS = [
 ]
 
 
-class ERaraAdapter(BaseAdapter):
-    """Adapter for e-rara.ch digital books."""
+class ERaraRepo(BaseRepo):
+    """Repo for e-rara.ch digital books."""
 
     name = "erara"
 
@@ -53,7 +41,7 @@ class ERaraAdapter(BaseAdapter):
     async def discover(self, **kwargs: Any) -> AsyncIterator[Record]:
         url = kwargs.get("url")
         if not url:
-            raise ValueError("e-rara adapter requires a 'url' keyword argument")
+            raise ValueError("e-rara repo requires a 'url' keyword argument")
 
         book_id = self._extract_id(url)
         if not book_id:
@@ -80,50 +68,47 @@ class ERaraAdapter(BaseAdapter):
         iiif_manifest = IIIFParser().parse(iiif_data)
         mets_doc = METSParser().parse(mets_data)
 
-        item = self._build_item(book_id, url, iiif_manifest, mets_doc, iiif_data, mets_data)
+        work = self._build_work(book_id, url, iiif_manifest, mets_doc)
 
         yield Record(
             id=book_id,
             source=url,
             stage=PipelineStage.DISCOVERED,
-            item=item,
+            work=work,
         )
 
     async def download(self, record: Record, output_dir: Path) -> Record:
-        if record.item is None:
-            record.errors.append("No item to download")
+        if record.work is None:
+            record.errors.append("No work to download")
             return record
 
-        item = record.item
+        work = record.work
         tasks: list[DownloadTask] = []
 
-        # Collect all downloadable resources
-        for resource in item.all_resources:
-            if resource.role in (ResourceRole.MANIFEST, ResourceRole.STRUCTURAL):
-                # Already saved as metadata
+        for media in work.all_media:
+            if media.role in ("manifest", "structural"):
                 continue
 
-            if resource.url:
-                save_dir = output_dir / _role_subdir(resource.role)
+            if media.content_url:
+                save_dir = output_dir / _role_subdir(media.role)
                 save_dir.mkdir(parents=True, exist_ok=True)
 
-                # Find the page item to get position
-                page_item = _find_resource_owner(item, resource)
-                if page_item and page_item.position is not None:
-                    pos_str = str(page_item.position).zfill(4)
-                    ext = _role_extension(resource.role)
+                owner = _find_media_owner(work, media)
+                if owner and owner.position is not None:
+                    pos_str = str(owner.position).zfill(4)
+                    ext = _role_extension(media.role)
                     filename = f"{pos_str}{ext}"
                 else:
-                    filename = resource.url.split("/")[-1] or "file"
+                    filename = media.content_url.split("/")[-1] or "file"
 
                 save_path = save_dir / filename
-                resource.local_path = save_path
+                media.local_path = save_path
 
                 tasks.append(
                     DownloadTask(
-                        url=resource.url,
+                        url=media.content_url,
                         save_path=save_path,
-                        fallback_url=resource.fallback_url,
+                        fallback_url=media.fallback_url,
                     )
                 )
 
@@ -133,31 +118,24 @@ class ERaraAdapter(BaseAdapter):
             count = await dm.execute()
             logger.info(f"Downloaded {count} resources for {record.id}")
 
-        item.local_dir = output_dir
+        work.local_dir = output_dir
         record.stage = PipelineStage.DOWNLOADED
         return record
 
     async def process(self, record: Record, output_dir: Path) -> Record:
-        if record.item is None:
+        if record.work is None:
             record.stage = PipelineStage.PROCESSED
             return record
 
         alto_parser = ALTOParser()
-        for page in record.item.get_children_by_type(WorkType.PAGE):
-            for resource in page.get_resources_by_role(ResourceRole.OCR):
-                if resource.local_path and resource.local_path.exists():
+        for page in record.work.get_parts_by_type("CreativeWork"):
+            for media in page.get_media_by_role("ocr"):
+                if media.local_path and media.local_path.exists():
                     try:
-                        alto_xml = resource.local_path.read_text(encoding="utf-8")
+                        alto_xml = media.local_path.read_text(encoding="utf-8")
                         page.text = alto_parser.extract_text_only(alto_xml)
                     except Exception as e:
                         record.errors.append(f"ALTO parse error page {page.position}: {e}")
-
-        # Write RO-Crate metadata
-        try:
-            writer = ROCrateWriter()
-            writer.write(record.item, output_dir)
-        except Exception as e:
-            record.errors.append(f"RO-Crate write error: {e}")
 
         record.stage = PipelineStage.PROCESSED
         return record
@@ -172,86 +150,82 @@ class ERaraAdapter(BaseAdapter):
                 return match.group(1)
         return None
 
-    def _build_item(self, book_id, url, iiif_manifest, mets_doc, iiif_data, mets_data):
-        """Build an Item tree from IIIF manifest + METS document."""
+    def _build_work(self, book_id, url, iiif_manifest, mets_doc):
+        """Build a CreativeWork tree from IIIF manifest + METS document."""
         mets_md = mets_doc.metadata
 
-        metadata = Metadata(
-            title=mets_md.title or f"Book {book_id}",
+        work = CreativeWork(
+            id=book_id,
+            type="Book",
+            name=mets_md.title or f"Book {book_id}",
+            url=url,
             creator=mets_md.author or "Unknown",
-            date=mets_md.date or "Unknown",
+            date_published=mets_md.date or "Unknown",
             publisher=mets_md.publisher,
             identifier=mets_md.doi,
-            language=mets_md.language,
-            rights=mets_md.license,
+            in_language=mets_md.language,
+            license=mets_md.license,
             description=mets_md.subtitle,
-            source_url=url,
-        )
-
-        doc = Item(
-            item_id=book_id,
-            work_type=WorkType.DOCUMENT,
-            source_url=url,
-            metadata=metadata,
-            data_provider=Provider(
-                name="ETH-Bibliothek", url="https://www.e-rara.ch", role=ProviderRole.DATA_PROVIDER
-            ),
-            resources=[
-                Resource(url=f"https://www.e-rara.ch/i3f/v20/{book_id}/manifest", role=ResourceRole.MANIFEST, mime_type="application/json"),
-                Resource(url=f"https://www.e-rara.ch/oai?verb=GetRecord&metadataPrefix=mets&identifier={book_id}", role=ResourceRole.STRUCTURAL, mime_type="application/xml"),
+            associated_media=[
+                MediaObject(
+                    content_url=f"https://www.e-rara.ch/i3f/v20/{book_id}/manifest",
+                    role="manifest",
+                    encoding_format="application/json",
+                ),
+                MediaObject(
+                    content_url=f"https://www.e-rara.ch/oai?verb=GetRecord&metadataPrefix=mets&identifier={book_id}",
+                    role="structural",
+                    encoding_format="application/xml",
+                ),
             ],
         )
 
-        # Build page children combining IIIF canvases and METS page info
         canvases = iiif_manifest.canvases
         mets_pages = {p.order: p for p in mets_doc.pages}
 
         for idx, canvas in enumerate(canvases, start=1):
-            page_resources: list[Resource] = []
+            page_media: list[MediaObject] = []
 
-            # Image from IIIF
             for image in canvas.images:
                 primary, fallback = self._build_image_urls(image)
-                page_resources.append(
-                    Resource(
-                        url=primary,
-                        role=ResourceRole.IMAGE,
-                        mime_type=f"image/{self.config.iiif_format}",
+                page_media.append(
+                    MediaObject(
+                        content_url=primary,
+                        role="image",
+                        encoding_format=f"image/{self.config.iiif_format}",
                         fallback_url=fallback,
                         width=image.width or canvas.width,
                         height=image.height or canvas.height,
                     )
                 )
 
-            # OCR and text from METS
             mets_page = mets_pages.get(idx)
             if mets_page:
                 for file_id in mets_page.file_ids:
                     mets_file = mets_doc.files.get(file_id)
                     if mets_file and mets_file.href:
                         if file_id.startswith("ALTO") or (mets_file.use and "FULLTEXT" in mets_file.use.upper()):
-                            page_resources.append(
-                                Resource(url=mets_file.href, role=ResourceRole.OCR, mime_type="application/xml")
+                            page_media.append(
+                                MediaObject(content_url=mets_file.href, role="ocr", encoding_format="application/xml")
                             )
-                            # Derive plain text URL
                             plain_url = mets_file.href.replace("/alto3/", "/plain/")
                             if plain_url != mets_file.href:
-                                page_resources.append(
-                                    Resource(url=plain_url, role=ResourceRole.TEXT, mime_type="text/plain")
+                                page_media.append(
+                                    MediaObject(content_url=plain_url, role="text", encoding_format="text/plain")
                                 )
 
             page_label = canvas.label or (mets_page.label if mets_page else str(idx))
 
-            page_item = Item(
-                item_id=canvas.id,
-                work_type=WorkType.PAGE,
+            page = CreativeWork(
+                id=canvas.id,
+                type="CreativeWork",
                 position=idx,
-                label=page_label,
-                resources=page_resources,
+                name=page_label,
+                associated_media=page_media,
             )
-            doc.add_child(page_item)
+            work.add_part(page)
 
-        return doc
+        return work
 
     def _build_image_urls(self, image) -> tuple[str, str | None]:
         if not image.service:
@@ -259,7 +233,6 @@ class ERaraAdapter(BaseAdapter):
 
         service_id = image.service.id.rstrip("/")
 
-        # Detect API version for size parameter
         api_version = 2
         if image.service.type and "ImageService3" in image.service.type:
             api_version = 3
@@ -278,34 +251,34 @@ class ERaraAdapter(BaseAdapter):
         return (primary, image.id if image.id else None)
 
 
-def _role_subdir(role: ResourceRole) -> str:
+def _role_subdir(role: str | None) -> str:
     return {
-        ResourceRole.IMAGE: "images",
-        ResourceRole.THUMBNAIL: "images",
-        ResourceRole.OCR: "ocr/alto",
-        ResourceRole.TEXT: "ocr/text",
-        ResourceRole.AUDIO: "audio",
-        ResourceRole.VIDEO: "video",
-    }.get(role, "other")
+        "image": "images",
+        "thumbnail": "images",
+        "ocr": "ocr/alto",
+        "text": "ocr/text",
+        "audio": "audio",
+        "video": "video",
+    }.get(role or "", "other")
 
 
-def _role_extension(role: ResourceRole) -> str:
+def _role_extension(role: str | None) -> str:
     return {
-        ResourceRole.IMAGE: ".jpg",
-        ResourceRole.THUMBNAIL: ".jpg",
-        ResourceRole.OCR: ".xml",
-        ResourceRole.TEXT: ".txt",
-        ResourceRole.AUDIO: ".mp3",
-        ResourceRole.VIDEO: ".mp4",
-    }.get(role, "")
+        "image": ".jpg",
+        "thumbnail": ".jpg",
+        "ocr": ".xml",
+        "text": ".txt",
+        "audio": ".mp3",
+        "video": ".mp4",
+    }.get(role or "", "")
 
 
-def _find_resource_owner(root: Item, resource: Resource) -> Item | None:
-    """Find the Item that directly owns a resource."""
-    if resource in root.resources:
+def _find_media_owner(root: CreativeWork, media: MediaObject) -> CreativeWork | None:
+    """Find the CreativeWork that directly owns a MediaObject."""
+    if media in root.associated_media:
         return root
-    for child in root.children:
-        result = _find_resource_owner(child, resource)
+    for part in root.parts:
+        result = _find_media_owner(part, media)
         if result:
             return result
     return None

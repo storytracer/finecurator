@@ -1,17 +1,17 @@
 """Core data models for the finecurator pipeline.
 
-Follows a single-class hierarchy: everything is an Item with a work_type enum.
-Items form trees via children/parent. Resources are downloadable files attached
-to items. Providers track data provenance (EDM ore:Aggregation pattern).
-Field names align with Dublin Core / Schema.org conventions.
+Built on Schema.org vocabulary. The central class is CreativeWork — a universal
+node that forms trees via parts/is_part_of (Schema.org hasPart/isPartOf).
+MediaObject represents downloadable files attached to works.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 class PipelineStage(Enum):
@@ -25,169 +25,110 @@ class PipelineStage(Enum):
     OUTPUT = "output"
 
 
-class WorkType(Enum):
-    """What kind of cultural heritage item this is."""
+class MediaObject(BaseModel):
+    """A downloadable file (Schema.org MediaObject).
 
-    WORK = "work"
-    SERIES = "series"
-    COLLECTION = "collection"
-    VOLUME = "volume"
-    ISSUE = "issue"
-    EDITION = "edition"
-    DOCUMENT = "document"
-    PART = "part"
-    PAGE = "page"
-    IMAGE = "image"
-    AUDIO = "audio"
-    VIDEO = "video"
-    OTHER = "other"
+    Maps to schema:MediaObject with practical extensions for downloading.
+    """
 
-
-class ResourceRole(Enum):
-    """The role a resource plays for its parent item."""
-
-    IMAGE = "image"
-    THUMBNAIL = "thumbnail"
-    OCR = "ocr"
-    TEXT = "text"
-    AUDIO = "audio"
-    VIDEO = "video"
-    MANIFEST = "manifest"
-    STRUCTURAL = "structural"
-    FULL = "full"
-    OTHER = "other"
-
-
-class ProviderRole(Enum):
-    """Role of a provider in the data supply chain."""
-
-    DATA_PROVIDER = "data_provider"
-    INTERMEDIATE = "intermediate"
-    AGGREGATOR = "aggregator"
-
-
-@dataclass
-class Resource:
-    """A downloadable file attached to an Item (Schema.org MediaObject)."""
-
-    url: str
-    role: ResourceRole
-    mime_type: str | None = None
-    local_path: Path | None = None
-    fallback_url: str | None = None
-    service_url: str | None = None
+    content_url: str
+    encoding_format: str | None = None
+    role: str | None = None  # e.g. "image", "thumbnail", "ocr", "text", "manifest"
     width: int | None = None
     height: int | None = None
     duration: float | None = None
-    size_bytes: int | None = None
+    content_size: int | None = None
+    local_path: Path | None = None
+    fallback_url: str | None = None
 
 
-@dataclass
-class Provider:
-    """A data provider in the provenance chain (EDM ore:Aggregation)."""
+class CreativeWork(BaseModel):
+    """A Schema.org CreativeWork — the universal node in the item hierarchy.
 
-    name: str
+    Everything is a CreativeWork: a book, collection, volume, page, etc.
+    The ``type`` string specifies the Schema.org type (e.g. "Book", "Collection",
+    "ImageObject"). Properties use Schema.org naming conventions.
+    """
+
+    id: str
+    type: str = "CreativeWork"
+    name: str | None = None
     url: str | None = None
-    role: ProviderRole = ProviderRole.DATA_PROVIDER
-
-
-@dataclass
-class Metadata:
-    """Structured metadata for a cultural heritage item.
-
-    Explicit Dublin Core fields plus an ``extra`` dict for anything else.
-    """
-
-    title: str | None = None
-    creator: str | None = None
-    date: str | None = None
-    language: str | None = None
-    source_url: str | None = None
-    license: str | None = None
-    rights: str | None = None
-    description: str | None = None
-    contributor: str | None = None
-    publisher: str | None = None
-    type: str | None = None
-    format: str | None = None
-    identifier: str | None = None
-    subject: list[str] = field(default_factory=list)
-    relation: str | None = None
-    coverage: str | None = None
-    extra: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class Item:
-    """A universal node in the cultural heritage hierarchy.
-
-    Everything is an Item — a work, edition, volume, page, image, audio track.
-    The ``work_type`` enum says what kind. ``children`` form a tree.
-    ``position`` is machine-readable order; ``label`` is the human display string.
-    """
-
-    item_id: str
-    work_type: WorkType
-    source_url: str | None = None
     position: int | None = None
-    label: str | None = None
-    metadata: Metadata = field(default_factory=Metadata)
+
+    # Schema.org properties
+    creator: str | None = None
+    date_published: str | None = None
+    in_language: str | None = None
+    license: str | None = None
+    description: str | None = None
+    publisher: str | None = None
+    contributor: str | None = None
+    identifier: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+
+    # Content
     text: str | None = None
-    resources: list[Resource] = field(default_factory=list)
-    children: list[Item] = field(default_factory=list)
-    parent: Item | None = field(default=None, repr=False)
-    data_provider: Provider | None = None
-    intermediate_provider: Provider | None = None
-    aggregator: Provider | None = None
+    encoding_format: str | None = None
+
+    # Hierarchy (hasPart / isPartOf)
+    parts: list[CreativeWork] = Field(default_factory=list)
+    is_part_of: CreativeWork | None = Field(default=None, repr=False, exclude=True)
+
+    # Associated media
+    associated_media: list[MediaObject] = Field(default_factory=list)
+
+    # Local filesystem
     local_dir: Path | None = None
 
-    def add_child(self, child: Item) -> None:
-        """Append a child item and set its parent back-reference."""
-        child.parent = self
-        self.children.append(child)
+    # Extension point
+    extra: dict[str, Any] = Field(default_factory=dict)
 
-    def get_children_by_type(self, work_type: WorkType) -> list[Item]:
-        """Return direct children matching the given work type."""
-        return [c for c in self.children if c.work_type == work_type]
+    def add_part(self, part: CreativeWork) -> None:
+        """Append a child part and set its isPartOf back-reference."""
+        part.is_part_of = self
+        self.parts.append(part)
 
-    def get_resources_by_role(self, role: ResourceRole) -> list[Resource]:
-        """Return resources on this item matching the given role."""
-        return [r for r in self.resources if r.role == role]
+    def get_parts_by_type(self, schema_type: str) -> list[CreativeWork]:
+        """Return direct parts matching the given Schema.org type."""
+        return [p for p in self.parts if p.type == schema_type]
+
+    def get_media_by_role(self, role: str) -> list[MediaObject]:
+        """Return media on this work matching the given role."""
+        return [m for m in self.associated_media if m.role == role]
 
     @property
-    def all_resources(self) -> list[Resource]:
-        """Recursively collect all resources from this item and descendants."""
-        result = list(self.resources)
-        for child in self.children:
-            result.extend(child.all_resources)
+    def all_media(self) -> list[MediaObject]:
+        """Recursively collect all media from this work and descendants."""
+        result = list(self.associated_media)
+        for part in self.parts:
+            result.extend(part.all_media)
         return result
 
     @property
-    def all_descendants(self) -> list[Item]:
-        """Recursively flatten all descendant items."""
-        result: list[Item] = []
-        for child in self.children:
-            result.append(child)
-            result.extend(child.all_descendants)
+    def all_parts(self) -> list[CreativeWork]:
+        """Recursively flatten all descendant parts."""
+        result: list[CreativeWork] = []
+        for part in self.parts:
+            result.append(part)
+            result.extend(part.all_parts)
         return result
 
 
-@dataclass
-class Record:
-    """Pipeline envelope wrapping an Item as it flows through stages."""
+class Record(BaseModel):
+    """Pipeline envelope wrapping a CreativeWork as it flows through stages."""
 
     id: str
     source: str
     stage: PipelineStage = PipelineStage.DISCOVERED
-    item: Item | None = None
-    errors: list[str] = field(default_factory=list)
+    work: CreativeWork | None = None
+    errors: list[str] = Field(default_factory=list)
 
 
-@dataclass
-class PipelineContext:
+class PipelineContext(BaseModel):
     """Runtime context passed through pipeline stages."""
 
-    adapter_name: str
+    repo_name: str
     output_dir: Path
     state_dir: Path
-    config: dict[str, Any] = field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)

@@ -1,4 +1,4 @@
-"""Abstract base class that all source adapters must implement."""
+"""Abstract base class that all repo modules must implement."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ from finecurator.models import Record
 from finecurator.registry import register
 
 
-class BaseAdapter(ABC):
-    """Contract for source-specific adapters.
+class BaseRepo(ABC):
+    """Contract for repo modules.
 
-    Each cultural heritage source gets its own adapter subclass.
+    Each cultural heritage repo gets its own subclass.
     Subclasses **must** set the ``name`` class variable. Registration
-    into the global adapter registry happens automatically when a
-    concrete (non-abstract) subclass is created.
+    into the global registry happens automatically when a concrete
+    (non-abstract) subclass is created.
     """
 
     name: ClassVar[str]
@@ -29,7 +29,7 @@ class BaseAdapter(ABC):
 
     @abstractmethod
     async def discover(self, **kwargs: Any) -> AsyncIterator[Record]:
-        """Discover records available from this source.
+        """Discover records available from this repo.
 
         Yields Record objects in the DISCOVERED stage.
         """

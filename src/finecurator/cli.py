@@ -8,11 +8,11 @@ from pathlib import Path
 
 import click
 
-# Import adapters so they auto-register
-import finecurator.adapters.erara  # noqa: F401
-import finecurator.adapters.iiif  # noqa: F401
+# Import repos so they auto-register
+import finecurator.repos.erara  # noqa: F401
 from finecurator.pipeline import Pipeline
-from finecurator.registry import get_adapter, list_adapters
+from finecurator.protocols.iiif import IIIFClient
+from finecurator.registry import get_repo, list_repos
 
 
 @click.group()
@@ -26,29 +26,52 @@ def cli(verbose: bool) -> None:
     )
 
 
-@cli.command("adapters")
-def list_adapters_cmd() -> None:
-    """List available source adapters."""
-    names = list_adapters()
+@cli.command("repos")
+def list_repos_cmd() -> None:
+    """List available repos."""
+    names = list_repos()
     if not names:
-        click.echo("No adapters registered.")
+        click.echo("No repos registered.")
         return
     for name in names:
         click.echo(name)
 
 
+# ── Direct protocol commands (no repo needed) ───────────────────────
+
+
 @cli.command()
-@click.argument("source")
+@click.argument("url")
+@click.option("-o", "--output-dir", type=click.Path(path_type=Path), default=Path("output"))
+def iiif(url: str, output_dir: Path) -> None:
+    """Fetch and download a IIIF manifest directly by URL."""
+
+    async def _iiif():
+        client = IIIFClient()
+        async for work in client.discover(url):
+            click.echo(f"[discovered] {work.id}  {work.name}")
+            count = await client.download_resources(work, output_dir)
+            work.local_dir = output_dir
+            click.echo(f"[downloaded] {count} files to {output_dir}")
+
+    asyncio.run(_iiif())
+
+
+# ── Repo-based pipeline commands ────────────────────────────────────
+
+
+@cli.command()
+@click.argument("repo")
 @click.option("-o", "--output-dir", type=click.Path(path_type=Path), default=Path("output"))
 @click.option("--url", default=None, help="Source URL (manifest, page, etc.).")
-def run(source: str, output_dir: Path, url: str | None) -> None:
-    """Run the full pipeline for SOURCE."""
+def run(repo: str, output_dir: Path, url: str | None) -> None:
+    """Run the full pipeline for REPO."""
     kwargs = {}
     if url:
         kwargs["url"] = url
 
     async def _run():
-        pipeline = Pipeline(adapter_name=source, output_dir=output_dir)
+        pipeline = Pipeline(repo_name=repo, output_dir=output_dir)
         async for record in pipeline.run(**kwargs):
             click.echo(f"[{record.stage.value}] {record.id}")
             if record.errors:
@@ -59,36 +82,35 @@ def run(source: str, output_dir: Path, url: str | None) -> None:
 
 
 @cli.command()
-@click.argument("source")
+@click.argument("repo")
 @click.option("--url", default=None, help="Source URL.")
-def discover(source: str, url: str | None) -> None:
-    """Discover records from SOURCE."""
+def discover(repo: str, url: str | None) -> None:
+    """Discover records from REPO."""
     kwargs = {}
     if url:
         kwargs["url"] = url
 
     async def _discover():
-        adapter_cls = get_adapter(source)
-        adapter = adapter_cls()
-        async for record in adapter.discover(**kwargs):
-            title = record.item.metadata.title if record.item else ""
-            click.echo(f"{record.id}  {title}")
+        repo_inst = get_repo(repo)()
+        async for record in repo_inst.discover(**kwargs):
+            name = record.work.name if record.work else ""
+            click.echo(f"{record.id}  {name}")
 
     asyncio.run(_discover())
 
 
 @cli.command()
-@click.argument("source")
+@click.argument("repo")
 @click.option("-o", "--output-dir", type=click.Path(path_type=Path), default=Path("output"))
 @click.option("--url", default=None, help="Source URL.")
-def download(source: str, output_dir: Path, url: str | None) -> None:
-    """Download records from SOURCE."""
+def download(repo: str, output_dir: Path, url: str | None) -> None:
+    """Download records from REPO."""
     kwargs = {}
     if url:
         kwargs["url"] = url
 
     async def _download():
-        pipeline = Pipeline(adapter_name=source, output_dir=output_dir)
+        pipeline = Pipeline(repo_name=repo, output_dir=output_dir)
         async for record in pipeline.download(pipeline.discover(**kwargs)):
             click.echo(f"[downloaded] {record.id}")
 
@@ -96,17 +118,17 @@ def download(source: str, output_dir: Path, url: str | None) -> None:
 
 
 @cli.command()
-@click.argument("source")
+@click.argument("repo")
 @click.option("-o", "--output-dir", type=click.Path(path_type=Path), default=Path("output"))
 @click.option("--url", default=None, help="Source URL.")
-def process(source: str, output_dir: Path, url: str | None) -> None:
-    """Process downloaded records from SOURCE."""
+def process(repo: str, output_dir: Path, url: str | None) -> None:
+    """Process downloaded records from REPO."""
     kwargs = {}
     if url:
         kwargs["url"] = url
 
     async def _process():
-        pipeline = Pipeline(adapter_name=source, output_dir=output_dir)
+        pipeline = Pipeline(repo_name=repo, output_dir=output_dir)
         records = pipeline.download(pipeline.discover(**kwargs))
         async for record in pipeline.process(records):
             click.echo(f"[processed] {record.id}")

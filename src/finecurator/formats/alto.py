@@ -5,14 +5,15 @@ Supports ALTO versions 1-4 with automatic version detection.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from typing import Any
 from xml.etree import ElementTree as ET
+
+from pydantic import BaseModel, Field
 
 from finecurator.formats.base import VersionedParser
 
 
-@dataclass
-class ALTOString:
+class ALTOString(BaseModel):
     content: str
     confidence: float | None = None
     x: int | None = None
@@ -21,9 +22,8 @@ class ALTOString:
     height: int | None = None
 
 
-@dataclass
-class ALTOTextLine:
-    strings: list[ALTOString] = field(default_factory=list)
+class ALTOTextLine(BaseModel):
+    strings: list[ALTOString] = Field(default_factory=list)
     x: int | None = None
     y: int | None = None
     width: int | None = None
@@ -33,9 +33,8 @@ class ALTOTextLine:
         return " ".join(s.content for s in self.strings)
 
 
-@dataclass
-class ALTOTextBlock:
-    lines: list[ALTOTextLine] = field(default_factory=list)
+class ALTOTextBlock(BaseModel):
+    lines: list[ALTOTextLine] = Field(default_factory=list)
     x: int | None = None
     y: int | None = None
     width: int | None = None
@@ -45,11 +44,10 @@ class ALTOTextBlock:
         return "\n".join(line.get_text() for line in self.lines)
 
 
-@dataclass
-class ALTOPage:
+class ALTOPage(BaseModel):
     width: int
     height: int
-    blocks: list[ALTOTextBlock] = field(default_factory=list)
+    blocks: list[ALTOTextBlock] = Field(default_factory=list)
     physical_img_nr: int | None = None
     page_id: str | None = None
 
@@ -57,11 +55,10 @@ class ALTOPage:
         return "\n\n".join(block.get_text() for block in self.blocks)
 
 
-@dataclass
-class ALTODocument:
+class ALTODocument(BaseModel):
     version: str | None = None
     page: ALTOPage | None = None
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     def get_text(self) -> str:
         return self.page.get_text() if self.page else ""

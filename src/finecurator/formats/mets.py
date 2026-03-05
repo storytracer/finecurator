@@ -5,9 +5,9 @@ Supports MODS metadata extraction and physical structure parsing.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
 from xml.etree import ElementTree as ET
+
+from pydantic import BaseModel, Field
 
 from finecurator.formats.base import MetadataParser
 
@@ -19,8 +19,7 @@ METS_NAMESPACES = {
 }
 
 
-@dataclass
-class METSFile:
+class METSFile(BaseModel):
     """A file reference in METS."""
 
     id: str
@@ -29,18 +28,16 @@ class METSFile:
     use: str | None = None
 
 
-@dataclass
-class METSPage:
+class METSPage(BaseModel):
     """A page in METS physical structure."""
 
     id: str
     label: str
     order: int
-    file_ids: list[str] = field(default_factory=list)
+    file_ids: list[str] = Field(default_factory=list)
 
 
-@dataclass
-class METSMetadata:
+class METSMetadata(BaseModel):
     """MODS metadata extracted from METS."""
 
     title: str | None = None
@@ -54,13 +51,12 @@ class METSMetadata:
     license: str | None = None
 
 
-@dataclass
-class METSDocument:
+class METSDocument(BaseModel):
     """A parsed METS document."""
 
     metadata: METSMetadata
-    pages: list[METSPage] = field(default_factory=list)
-    files: dict[str, METSFile] = field(default_factory=dict)
+    pages: list[METSPage] = Field(default_factory=list)
+    files: dict[str, METSFile] = Field(default_factory=dict)
 
 
 class METSParser(MetadataParser[str, METSDocument]):
@@ -115,26 +111,25 @@ class METSParser(MetadataParser[str, METSDocument]):
         return ["application/xml", "text/xml", "application/mets+xml"]
 
     def _parse_mods_metadata(self, root: ET.Element) -> METSMetadata:
-        metadata = METSMetadata()
         mods = root.find(".//mods:mods", METS_NAMESPACES)
         if mods is None:
-            return metadata
+            return METSMetadata()
 
         def _text(xpath: str) -> str | None:
             el = mods.find(xpath, METS_NAMESPACES)
             return el.text.strip() if el is not None and el.text else None
 
-        metadata.title = _text(".//mods:titleInfo/mods:title")
-        metadata.subtitle = _text(".//mods:titleInfo/mods:subTitle")
-        metadata.author = _text('.//mods:name[@type="personal"]/mods:namePart')
-        metadata.publisher = _text(".//mods:originInfo/mods:publisher")
-        metadata.date = _text(".//mods:originInfo/mods:dateIssued")
-        metadata.language = _text(".//mods:language/mods:languageTerm")
-        metadata.extent = _text(".//mods:physicalDescription/mods:extent")
-        metadata.doi = _text('.//mods:identifier[@type="doi"]')
-        metadata.license = _text(".//mods:accessCondition")
-
-        return metadata
+        return METSMetadata(
+            title=_text(".//mods:titleInfo/mods:title"),
+            subtitle=_text(".//mods:titleInfo/mods:subTitle"),
+            author=_text('.//mods:name[@type="personal"]/mods:namePart'),
+            publisher=_text(".//mods:originInfo/mods:publisher"),
+            date=_text(".//mods:originInfo/mods:dateIssued"),
+            language=_text(".//mods:language/mods:languageTerm"),
+            extent=_text(".//mods:physicalDescription/mods:extent"),
+            doi=_text('.//mods:identifier[@type="doi"]'),
+            license=_text(".//mods:accessCondition"),
+        )
 
     def _parse_file_section(self, root: ET.Element) -> dict[str, METSFile]:
         files: dict[str, METSFile] = {}
